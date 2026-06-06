@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ══════════════════════════════════════════════════
+//  PHASE 1 — Core Tables
+// ══════════════════════════════════════════════════
+
+// 1. Users
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          Role      @default(BUYER)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company?
+  subscription  Subscription?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  BUYER
+  SUPPLIER
+  INVESTOR
+}
+
+// 2. Companies
+model Company {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+
+  nameEn          String
+  nameAr          String?
+  crNumber        String?   @unique   // رقم السجل التجاري
+  vatNumber       String?   @unique   // رقم ضريبة القيمة المضافة
+  phone           String?
+  email           String?
+  website         String?
+  city            String?
+  region          String?             // Eastern Province, Riyadh, etc.
+  country         String    @default("SA")
+
+  supplierProfile SupplierProfile?
+  subscriptions   Subscription[]
+  invoices        Invoice[]
+  rfqs            Rfq[]         @relation("BuyerRfqs")
+  emergencyRfqs   EmergencyRfq[] @relation("EmergencyRfqs")
+  iktvaCalcs      IktvaCalculation[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("companies")
+}
+
+// 3. Supplier Profiles
+model SupplierProfile {
+  id              String    @id @default(uuid())
+  companyId       String    @unique
+  company         Company   @relation(fields: [companyId], references: [id])
+
+  // Saudi-specific
+  iktvaScore      Float?              // IKTVA %
+  aramcoApproved  Boolean   @default(false)
+  sabicApproved   Boolean   @default(false)
+  saudizationPct  Float?              // Nitaqat %
+
+  // Service pillars (1=Valves, 2=Parts, 3=Machining, 4=3DPrint, 5=TPI, 6=Rental)
+  pillar1Valves   Boolean   @default(false)
+  pillar2Parts    Boolean   @default(false)
+  pillar3Machining Boolean  @default(false)
+  pillar4Print    Boolean   @default(false)
+  pillar5TPI      Boolean   @default(false)
+  pillar6Rental   Boolean   @default(false)
+
+  isVerified      Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  tier            SupplierTier @default(P1_SAUDI)
+
+  certifications  SupplierCertification[]
+  rfqResponses    RfqResponse[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("supplier_profiles")
+}
+
+enum SupplierTier {
+  P1_SAUDI
+  P2_GLOBAL
+  EMERGENCY
+}
+
+// 4. Certifications
+model SupplierCertification {
+  id              String    @id @default(uuid())
+  supplierId      String
+  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  name            String              // ISO 9001, API 6D, etc.
+  issuedBy        String?
+  expiryDate      DateTime?
+  documentUrl     String?             // S3 URL
+
+  createdAt       DateTime  @default(now())
+
+  @@map("supplier_certifications")
+}
+
+// 5. Subscription Plans
+model SubscriptionPlan {
+  id              String    @id @default(uuid())
+  nameEn          String
+  nameAr          String?
+  priceMonthly    Float               // SAR
+  priceYearly     Float               // SAR
+  features        String[]            // list of features
+  maxRfqs         Int       @default(0)
+  isActive        Boolean   @default(true)
+
+  subscriptions   Subscription[]
+
+  @@map("subscription_plans")
+}
+
+// 6. Subscriptions
+model Subscription {
+  id              String    @id @default(uuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  status          SubStatus @default(ACTIVE)
+  startDate       DateTime  @default(now())
+  endDate         DateTime
+  billingCycle    BillingCycle @default(MONTHLY)
+
+  payments        Payment[]
+  invoices        Invoice[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("subscriptions")
+}
+
+enum SubStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+// 7. Payments (Moyasar)
+model Payment {
+  id              String    @id @default(uuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id])
+
+  moyasarId       String?   @unique   // Moyasar payment ID
+  amount          Float               // SAR (without VAT)
+  vatAmount       Float               // 15% VAT
+  totalAmount     Float               // SAR total
+  status          PaymentStatus @default(PENDING)
+  method          String?             // creditcard, mada, applepay
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  invoice         Invoice?
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// 8. Invoices (ZATCA compliant)
+model Invoice {
+  id              String    @id @default(uuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  paymentId       String?   @unique
+  payment         Payment?  @relation(fields: [paymentId], references: [id])
+
+  invoiceNumber   String    @unique   // TVH-2026-000001
+  zatcaUuid       String?             // ZATCA UUID
+  zatcaStatus     String?             // reported | cleared
+  qrCode          String?             // Base64 TLV QR
+
+  subtotal        Float
+  vatAmount       Float               // 15%
+  total           Float
+  pdfUrl          String?             // S3 URL
+
+  issueDate       DateTime  @default(now())
+
+  @@map("invoices")
+}
+
+// 9. Notifications
+model Notification {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+
+  title           String
+  body            String
+  type            String              // rfq, payment, emergency, system
+  isRead          Boolean   @default(false)
+  link            String?
+
+  createdAt       DateTime  @default(now())
+
+  @@map("notifications")
+}
+
+// ══════════════════════════════════════════════════
+//  PHASE 2 — RFQ & Emergency Tables
+// ══════════════════════════════════════════════════
+
+// 10. RFQs
+model Rfq {
+  id              String      @id @default(uuid())
+  buyerCompanyId  String
+  buyerCompany    Company     @relation("BuyerRfqs", fields: [buyerCompanyId], references: [id])
+
+  title           String
+  description     String
+  pillar          Int                     // 1-6 (Pillar category)
+  quantity        String?
+  unit            String?
+  specs           String?                 // Technical specs / file URL
+  deliveryDate    DateTime?
+  deliveryCity    String?
+  region          String?
+
+  status          RfqStatus   @default(OPEN)
+  awardedTo       String?                 // supplierId who won
+  closedAt        DateTime?
+
+  responses       RfqResponse[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("rfqs")
+}
+
+enum RfqStatus {
+  OPEN
+  AWARDED
+  CLOSED
+  CANCELLED
+}
+
+// 11. RFQ Responses
+model RfqResponse {
+  id              String      @id @default(uuid())
+  rfqId           String
+  rfq             Rfq         @relation(fields: [rfqId], references: [id])
+  supplierId      String
+  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  priceTotal      Float
+  currency        String      @default("SAR")
+  leadTimeDays    Int?
+  notes           String?
+  attachmentUrl   String?
+
+  isAwarded       Boolean     @default(false)
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([rfqId, supplierId])
+  @@map("rfq_responses")
+}
+
+// 12. Emergency RFQs
+model EmergencyRfq {
+  id              String      @id @default(uuid())
+  companyId       String
+  company         Company     @relation("EmergencyRfqs", fields: [companyId], references: [id])
+
+  title           String
+  description     String
+  pillar          Int
+  urgency         UrgencyLevel @default(HIGH)
+  plantDown       Boolean     @default(false)   // منشأة متوقفة؟
+  location        String?
+  contactPhone    String?
+
+  status          EmergencyStatus @default(OPEN)
+  assignedTo      String?         // supplierId
+
+  resolvedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("emergency_rfqs")
+}
+
+enum UrgencyLevel {
+  CRITICAL   // Plant down — خلال ساعتين
+  HIGH       // خلال 24 ساعة
+  MEDIUM     // خلال 72 ساعة
+}
+
+enum EmergencyStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+// ══════════════════════════════════════════════════
+//  PHASE 3 — IKTVA Calculator
+// ══════════════════════════════════════════════════
+
+// 13. IKTVA Calculations
+model IktvaCalculation {
+  id              String    @id @default(uuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+
+  // المدخلات
+  totalRevenue        Float     // إجمالي الإيرادات SAR
+  saudiLabourCost     Float     // تكلفة العمالة السعودية
+  saudiMaterialCost   Float     // تكلفة المواد السعودية
+  saudiServiceCost    Float     // تكلفة الخدمات السعودية
+  saudiOverheadCost   Float     // تكاليف عامة سعودية
+  saudiCapexCost      Float     // الاستثمارات الرأسمالية السعودية
+
+  // النتائج
+  iktvaScore      Float     // النتيجة النهائية %
+  iktvaAmount     Float     // المبلغ السعودي الإجمالي
+
+  notes           String?
+  period          String?   // "Q1 2026", "2025", etc.
+
+  createdAt       DateTime  @default(now())
+
+  @@map("iktva_calculations")
+}
