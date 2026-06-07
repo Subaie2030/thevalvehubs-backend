@@ -77,4 +77,51 @@ router.get('/invoices', ...ADMIN, async (req, res) => {
   res.json({ invoices, total: invoices.length });
 });
 
+// GET /api/admin/rfqs  — all RFQs with buyer + responses
+router.get('/rfqs', ...ADMIN, async (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query;
+  const where = {};
+  if (status) where.status = status;
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const [total, rfqs] = await Promise.all([
+    prisma.rfq.count({ where }),
+    prisma.rfq.findMany({
+      where,
+      skip,
+      take: Number(limit),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        company:   { select: { nameEn: true, nameAr: true, city: true } },
+        responses: { select: { id: true, totalPrice: true, currency: true, status: true } },
+        invoice:   { select: { id: true, invoiceNumber: true, total: true } },
+      },
+    }),
+  ]);
+
+  res.json({ data: rfqs, total, page: Number(page), limit: Number(limit) });
+});
+
+// GET /api/admin/emergency  — all emergency RFQs
+router.get('/emergency', ...ADMIN, async (req, res) => {
+  const rfqs = await prisma.emergencyRfq.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      company: { select: { nameEn: true, nameAr: true, city: true } },
+    },
+  });
+  res.json({ data: rfqs, total: rfqs.length });
+});
+
+// PATCH /api/admin/suppliers/:id/verify
+router.patch('/suppliers/:id/verify', ...ADMIN, async (req, res) => {
+  const { isVerified } = req.body;
+  // id here is the SupplierProfile id
+  const profile = await prisma.supplierProfile.update({
+    where: { id: req.params.id },
+    data:  { isVerified: Boolean(isVerified) },
+  });
+  res.json({ message: 'Supplier verification updated', data: profile });
+});
+
 module.exports = router;

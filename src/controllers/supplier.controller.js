@@ -95,10 +95,12 @@ const listSuppliers = async (req, res) => {
       orderBy: [{ isVerified: 'desc' }, { iktvaScore: 'desc' }],
       select: {
         id:              true,
+        companyId:       true,
         tier:            true,
         isVerified:      true,
         iktvaScore:      true,
         aramcoApproved:  true,
+        sabicApproved:   true,
         pillar1Valves:   true,
         pillar2Parts:    true,
         pillar3Machining: true,
@@ -107,12 +109,14 @@ const listSuppliers = async (req, res) => {
         pillar6Rental:   true,
         company: {
           select: {
-            nameEn: true,
-            nameAr: true,
-            city:   true,
-            region: true,
+            id:      true,
+            nameEn:  true,
+            nameAr:  true,
+            city:    true,
+            region:  true,
             country: true,
             website: true,
+            isVerified: true,
           },
         },
         certifications: {
