@@ -30,4 +30,16 @@ router.delete('/certs/:certId',
   authenticate, authorize('SUPPLIER', 'ADMIN'),
   deleteCertification);
 
+// ── Admin: verify supplier ─────────────────────────
+router.patch('/:id/verify',
+  authenticate, authorize('ADMIN'),
+  async (req, res) => {
+    const { isVerified } = req.body;
+    const company = await require('../config/database').company.update({
+      where: { id: req.params.id },
+      data:  { isVerified: Boolean(isVerified) },
+    });
+    res.json({ company });
+  });
+
 module.exports = router;

@@ -50,6 +50,7 @@ app.use('/api/rfqs',          require('./routes/rfq.routes'));
 // app.use('/api/emergency',     require('./routes/emergency.routes'));
 // app.use('/api/projects',      require('./routes/project.routes'));
 app.use('/api/iktva',         require('./routes/iktva.routes'));
+app.use('/api/admin',         require('./routes/admin.routes'));
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
