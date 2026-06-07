@@ -51,6 +51,8 @@ model Company {
   city            String?
   region          String?             // Eastern Province, Riyadh, etc.
   country         String    @default("SA")
+  description     String?
+  sector          String?
 
   supplierProfile SupplierProfile?
   subscriptions   Subscription[]

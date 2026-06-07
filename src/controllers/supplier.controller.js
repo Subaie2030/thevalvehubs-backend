@@ -3,30 +3,39 @@ const prisma = require('../config/database');
 
 // ── Zod Schemas ────────────────────────────────────
 const profileSchema = z.object({
-  // Company info
+  // Company info (passed through to company update)
   nameAr:          z.string().optional(),
   crNumber:        z.string().optional(),
   vatNumber:       z.string().optional(),
   phone:           z.string().optional(),
-  website:         z.string().url().optional().or(z.literal('')),
+  website:         z.string().optional().transform(v => (!v || v.trim() === '' ? undefined : v)),
   city:            z.string().optional(),
   region:          z.string().optional(),
   country:         z.string().default('SA'),
 
   // Supplier pillars (true/false)
-  pillar1Valves:   z.boolean().default(false),
-  pillar2Parts:    z.boolean().default(false),
+  pillar1Valves:    z.boolean().default(false),
+  pillar2Parts:     z.boolean().default(false),
   pillar3Machining: z.boolean().default(false),
-  pillar4Print:    z.boolean().default(false),
-  pillar5TPI:      z.boolean().default(false),
-  pillar6Rental:   z.boolean().default(false),
+  pillar4Print:     z.boolean().default(false),
+  pillar5TPI:       z.boolean().default(false),
+  pillar6Rental:    z.boolean().default(false),
 
-  // Saudi-specific
-  iktvaScore:      z.number().min(0).max(100).optional(),
-  aramcoApproved:  z.boolean().default(false),
-  sabicApproved:   z.boolean().default(false),
-  saudizationPct:  z.number().min(0).max(100).optional(),
-  tier:            z.enum(['P1_SAUDI', 'P2_GLOBAL', 'EMERGENCY']).default('P1_SAUDI'),
+  // Saudi-specific — accept both naming conventions from frontend
+  iktvaScore:       z.number().min(0).max(100).optional(),
+  aramcoApproved:   z.boolean().default(false),
+  isAramcoApproved: z.boolean().optional(), // alias
+  sabicApproved:    z.boolean().default(false),
+  isSabicApproved:  z.boolean().optional(), // alias
+  saudizationPct:   z.number().min(0).max(100).optional(),
+  tier:             z.enum(['P1_SAUDI', 'P2_GLOBAL', 'EMERGENCY']).default('P1_SAUDI'),
+}).transform(data => {
+  // Merge alias field names into canonical names
+  if (data.isAramcoApproved !== undefined) data.aramcoApproved = data.isAramcoApproved;
+  if (data.isSabicApproved  !== undefined) data.sabicApproved  = data.isSabicApproved;
+  delete data.isAramcoApproved;
+  delete data.isSabicApproved;
+  return data;
 });
 
 const certSchema = z.object({
@@ -142,7 +151,13 @@ const getSupplier = async (req, res) => {
 
 // ── POST /api/suppliers/profile  (إنشاء/تحديث ملف المورد) ─
 const upsertProfile = async (req, res) => {
+  // Strip unknown fields safely — don't let Zod crash on extra frontend fields
   const data = profileSchema.parse(req.body);
+
+  // Also grab extra company-level fields that aren't in the profile schema
+  const nameEn      = req.body.nameEn      || undefined;
+  const description = req.body.description || undefined;
+  const sector      = req.body.sector      || undefined;
 
   // جلب companyId من المستخدم الحالي
   const company = await prisma.company.findUnique({
@@ -152,11 +167,25 @@ const upsertProfile = async (req, res) => {
 
   const { nameAr, crNumber, vatNumber, phone, website, city, region, country, ...profileData } = data;
 
+  // Build company update — only include defined fields
+  const companyUpdate = {};
+  if (nameEn)      companyUpdate.nameEn      = nameEn;
+  if (nameAr)      companyUpdate.nameAr      = nameAr;
+  if (crNumber)    companyUpdate.crNumber    = crNumber;
+  if (vatNumber)   companyUpdate.vatNumber   = vatNumber;
+  if (phone)       companyUpdate.phone       = phone;
+  if (website)     companyUpdate.website     = website;
+  if (city)        companyUpdate.city        = city;
+  if (region)      companyUpdate.region      = region;
+  if (country)     companyUpdate.country     = country;
+  if (description) companyUpdate.description = description;
+  if (sector)      companyUpdate.sector      = sector;
+
   // تحديث بيانات الشركة + إنشاء/تحديث ملف المورد في عملية واحدة
   const [, profile] = await prisma.$transaction([
     prisma.company.update({
       where: { id: company.id },
-      data:  { nameAr, crNumber, vatNumber, phone, website, city, region, country },
+      data:  companyUpdate,
     }),
     prisma.supplierProfile.upsert({
       where:  { companyId: company.id },

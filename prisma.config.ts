@@ -2,7 +2,7 @@ import path from 'node:path'
 import { defineConfig } from 'prisma/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 
-const connectionString = process.env.DATABASE_URL!
+const connectionString = process.env.DATABASE_URL || process.env.DATABASE_URL_OVERRIDE!
 
 export default defineConfig({
   earlyAccess: true,
