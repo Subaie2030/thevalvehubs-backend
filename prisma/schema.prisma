@@ -344,7 +344,51 @@ enum EmergencyStatus {
 }
 
 // ══════════════════════════════════════════════════
-//  PHASE 3 — IKTVA Calculator
+//  PHASE 3 — Valve Expert Network
+// ══════════════════════════════════════════════════
+
+// 13. Expert Profiles (Valve Experts Network)
+model ExpertProfile {
+  id              String    @id @default(uuid())
+
+  // Personal
+  fullName        String
+  jobTitle        String
+  email           String
+  phone           String
+  nationality     String?
+  location        String
+  yearsExp        String              // "4–7 Years" etc.
+  availability    String
+  iqamaStatus     String?
+  linkedIn        String?
+
+  // Professional
+  specialisation  String
+  skills          String[]            // array of skill strings
+  summary         String
+  certifications  String?
+  oemTraining     String?
+
+  // Review
+  status          ExpertStatus @default(PENDING)
+  reviewedAt      DateTime?
+  reviewNotes     String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("expert_profiles")
+}
+
+enum ExpertStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ══════════════════════════════════════════════════
+//  PHASE 4 — IKTVA Calculator
 // ══════════════════════════════════════════════════
 
 // 13. IKTVA Calculations
