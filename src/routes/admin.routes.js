@@ -49,4 +49,32 @@ router.get('/stats', ...ADMIN, async (req, res) => {
   });
 });
 
+// GET /api/admin/notifications
+router.get('/notifications', ...ADMIN, async (req, res) => {
+  const notifications = await prisma.notification.findMany({
+    where:   { userId: req.user.id },
+    orderBy: { createdAt: 'desc' },
+    take:    50,
+  });
+  res.json({ notifications, unread: notifications.filter(n => !n.isRead).length });
+});
+
+// PATCH /api/admin/notifications/read-all
+router.patch('/notifications/read-all', ...ADMIN, async (req, res) => {
+  await prisma.notification.updateMany({
+    where: { userId: req.user.id, isRead: false },
+    data:  { isRead: true },
+  });
+  res.json({ success: true });
+});
+
+// GET /api/admin/invoices
+router.get('/invoices', ...ADMIN, async (req, res) => {
+  const invoices = await prisma.invoice.findMany({
+    include: { company: { select: { nameEn: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ invoices, total: invoices.length });
+});
+
 module.exports = router;

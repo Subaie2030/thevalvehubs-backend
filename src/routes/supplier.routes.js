@@ -34,11 +34,26 @@ router.delete('/certs/:certId',
 router.patch('/:id/verify',
   authenticate, authorize('ADMIN'),
   async (req, res) => {
+    const prisma = require('../config/database');
+    const { sendVerificationEmail } = require('../services/email.service');
     const { isVerified } = req.body;
-    const company = await require('../config/database').company.update({
-      where: { id: req.params.id },
-      data:  { isVerified: Boolean(isVerified) },
+
+    // :id is the Company ID
+    const company = await prisma.company.update({
+      where:   { id: req.params.id },
+      data:    { isVerified: Boolean(isVerified) },
+      include: { user: { select: { email: true } } },
     });
+
+    // Send verification email when verified
+    if (isVerified && company.user?.email) {
+      sendVerificationEmail({
+        email:       company.user.email,
+        nameEn:      company.nameEn,
+        companyName: company.nameEn,
+      }).catch(e => console.error('Verify email failed:', e.message));
+    }
+
     res.json({ company });
   });
 

@@ -3,6 +3,7 @@ const jwt     = require('jsonwebtoken');
 const { z }   = require('zod');
 const prisma  = require('../config/database');
 const { BCRYPT_ROUNDS } = require('../config/constants');
+const { sendWelcomeEmail } = require('../services/email.service');
 
 // ── Zod Schemas ────────────────────────────────────
 const registerSchema = z.object({
@@ -62,6 +63,14 @@ const register = async (req, res) => {
   });
 
   const token = generateToken(user.id, user.role);
+
+  // Send welcome email (non-blocking)
+  sendWelcomeEmail({
+    email:       user.email,
+    nameEn:      user.company?.nameEn,
+    role:        user.role,
+    companyName: user.company?.nameEn,
+  }).catch(err => console.error('Welcome email failed:', err.message));
 
   res.status(201).json({
     message: 'Account created successfully',
