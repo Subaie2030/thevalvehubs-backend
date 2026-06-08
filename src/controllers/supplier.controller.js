@@ -47,7 +47,7 @@ const certSchema = z.object({
 
 const listSchema = z.object({
   page:     z.coerce.number().default(1),
-  limit:    z.coerce.number().max(50).default(20),
+  limit:    z.coerce.number().max(500).default(20),
   pillar:   z.enum(['1','2','3','4','5','6']).optional(),
   tier:     z.enum(['P1_SAUDI','P2_GLOBAL','EMERGENCY']).optional(),
   region:   z.string().optional(),
