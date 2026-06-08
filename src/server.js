@@ -15,13 +15,23 @@ const PORT = process.env.PORT || 3000;
 // ── Security & Middleware ──────────────────────────
 app.use(helmet());
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:5500',
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    /\.netlify\.app$/,          // كل نطاقات Netlify
-    /thevalvehubs\.com$/,       // النطاق الرسمي لاحقاً
-  ],
+  origin: (origin, callback) => {
+    const allowed = [
+      process.env.FRONTEND_URL,
+      'http://localhost:5500',
+      'http://127.0.0.1:5500',
+    ];
+    const allowedPatterns = [
+      /\.netlify\.app$/,
+      /thevalvehubs\.com$/,
+    ];
+    // Allow requests with no origin (server-to-server, mobile, Postman)
+    // or null origin (local file:// protocol during development)
+    if (!origin || origin === 'null') return callback(null, true);
+    if (allowed.includes(origin)) return callback(null, true);
+    if (allowedPatterns.some(p => p.test(origin))) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(compression());
