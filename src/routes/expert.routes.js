@@ -34,24 +34,20 @@ router.get('/', authenticate, async (req, res) => {
   const status   = req.query.status || (isAdmin ? undefined : 'APPROVED');
   const where    = status ? { status } : {};
 
+  // Build select dynamically — Prisma v7 does not accept false values in select
+  const baseSelect = {
+    id: true, fullName: true, jobTitle: true, specialisation: true,
+    location: true, yearsExp: true, availability: true, skills: true,
+    status: true, createdAt: true, nationality: true,
+    certifications: true, oemTraining: true, summary: true,
+  };
+  const adminSelect = { email: true, phone: true, linkedIn: true, reviewNotes: true, reviewedAt: true };
+  const select = isAdmin ? { ...baseSelect, ...adminSelect } : baseSelect;
+
   const experts = await prisma.expertProfile.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true, fullName: true, jobTitle: true, specialisation: true,
-      location: true, yearsExp: true, availability: true, skills: true,
-      status: true, createdAt: true,
-      // hide contact info for non-admin
-      email:    isAdmin,
-      phone:    isAdmin,
-      linkedIn: isAdmin,
-      nationality: true,
-      certifications: true,
-      oemTraining:    true,
-      summary:        true,
-      reviewNotes:    isAdmin,
-      reviewedAt:     isAdmin,
-    },
+    select,
   });
   res.json({ data: experts, total: experts.length });
 });
